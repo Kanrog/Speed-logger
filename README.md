@@ -18,8 +18,8 @@ To accurately measure a 1Gbps connection, a speedtest must completely saturate y
 Clone the repository to your server (such as CasaOS or any Debian-based system) and run the install script:
 
 ```bash
-git clone https://github.com/Kanrog/speedtest-monitor.git
-cd speedtest-monitor
+git clone https://github.com/Kanrog/Speed-logger.git
+cd Speed-logger
 bash install.sh
 ```
 The script will prompt you for a port number (default is 8080) and automatically build and start the Docker container.
