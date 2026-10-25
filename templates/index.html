@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speedtest Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; color: #333; }
+        h1, h2 { color: #222; }
+        .container { max-width: 1000px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .chart-container { position: relative; height: 40vh; width: 100%; margin-bottom: 30px; }
+        .settings-form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .settings-form label { font-weight: bold; }
+        .settings-form input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; }
+        .buttons { display: flex; gap: 10px; margin-top: 15px; }
+        button { padding: 10px 15px; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Network Speed Monitor</h1>
+    
+    <div class="chart-container">
+        <canvas id="speedChart"></canvas>
+    </div>
+
+    <div class="buttons" style="margin-bottom: 30px;">
+        <button onclick="window.location.href='/api/export'">Download CSV History</button>
+        <button class="btn-danger" onclick="deleteAll()">Delete All Results</button>
+    </div>
+
+    <h2>Settings</h2>
+    <div class="settings-form">
+        <div>
+            <label>Interval (Minutes):</label>
+            <input type="number" id="interval" />
+        </div>
+        <div>
+            <label>Threshold (Mbps):</label>
+            <input type="number" id="threshold" />
+        </div>
+        <div>
+            <label>Full Test Times (comma separated, HH:MM):</label>
+            <input type="text" id="times" />
+        </div>
+        <div>
+            <label>Data Retention (Days):</label>
+            <input type="number" id="retention" />
+        </div>
+    </div>
+    <button onclick="saveSettings()">Save Settings</button>
+</div>
+
+<script>
+    let chartInstance = null;
+
+    async function loadData() {
+        const response = await fetch('/api/results');
+        const data = await response.json();
+
+        const labels = data.map(d => d.timestamp.split(' ')[1]);
+        const downloadData = data.map(d => d.download);
+        const uploadData = data.map(d => d.upload);
+
+        const ctx = document.getElementById('speedChart').getContext('2d');
+        
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Download (Mbps)',
+                        data: downloadData,
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Upload (Mbps)',
+                        data: uploadData,
+                        borderColor: 'rgb(153, 102, 255)',
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    async function loadSettings() {
+        const response = await fetch('/api/settings');
+        const settings = await response.json();
+        document.getElementById('interval').value = settings.interval_minutes;
+        document.getElementById('threshold').value = settings.threshold_mbps;
+        document.getElementById('times').value = settings.full_test_times;
+        document.getElementById('retention').value = settings.retention_days;
+    }
+
+    async function saveSettings() {
+        const settings = {
+            interval_minutes: document.getElementById('interval').value,
+            threshold_mbps: document.getElementById('threshold').value,
+            full_test_times: document.getElementById('times').value,
+            retention_days: document.getElementById('retention').value
+        };
+        await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+        alert('Settings saved successfully!');
+    }
+
+    async function deleteAll() {
+        if(confirm("Are you sure you want to delete all historical speedtest data? This cannot be undone.")) {
+            await fetch('/api/delete_all', { method: 'POST' });
+            loadData();
+            alert("All data deleted.");
+        }
+    }
+
+    loadData();
+    loadSettings();
+</script>
+
+</body>
+</html>

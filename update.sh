@@ -1,0 +1,4 @@
+#!/bin/bash
+git pull
+docker compose up -d --build
+echo "Update complete. The container has been rebuilt and restarted."
