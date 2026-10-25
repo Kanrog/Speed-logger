@@ -7,3 +7,5 @@ services:
       - "${WEB_PORT:-8080}:8080"
     volumes:
       - ./data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
