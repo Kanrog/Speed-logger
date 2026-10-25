@@ -3,6 +3,8 @@ import json
 import sqlite3
 import subprocess
 import datetime
+import time
+import requests
 from flask import Flask, render_template, request, jsonify, Response
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -61,7 +63,42 @@ def cleanup_old_results():
     conn.commit()
     conn.close()
 
-def run_speedtest(is_full_test=False):
+def quick_check():
+    cleanup_old_results()
+    threshold = float(get_setting("threshold_mbps"))
+    download_url = "https://speed.hetzner.de/100MB.bin"
+    
+    try:
+        start_time = time.time()
+        response = requests.get(download_url, stream=True, timeout=10)
+        
+        total_bytes = 0
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:
+                total_bytes += len(chunk)
+                
+        end_time = time.time()
+        duration = end_time - start_time
+        
+        if duration > 0:
+            download_mbps = (total_bytes * 8) / 1000000 / duration
+        else:
+            download_mbps = 0
+            
+        is_ok = 1 if download_mbps >= threshold else 0
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO results (timestamp, ping, download, upload, is_ok, is_full_test) VALUES (?, ?, ?, ?, ?, ?)',
+                       (timestamp, 0, download_mbps, 0, is_ok, 0))
+        conn.commit()
+        conn.close()
+        
+    except Exception as e:
+        print(f"Quick check failed: {e}")
+
+def run_full_speedtest():
     cleanup_old_results()
     threshold = float(get_setting("threshold_mbps"))
     
@@ -79,22 +116,15 @@ def run_speedtest(is_full_test=False):
         ping = data['ping']['latency']
         
         is_ok = 1 if download_mbps >= threshold else 0
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        if is_full_test or not is_ok:
-            cursor.execute('INSERT INTO results (timestamp, ping, download, upload, is_ok, is_full_test) VALUES (?, ?, ?, ?, ?, ?)',
-                           (timestamp, ping, download_mbps, upload_mbps, is_ok, 1 if is_full_test else 0))
-        else:
-            # If it's just a standard check and it passes the threshold, log as OK without heavy metrics
-            cursor.execute('INSERT INTO results (timestamp, ping, download, upload, is_ok, is_full_test) VALUES (?, ?, ?, ?, ?, ?)',
-                           (timestamp, ping, download_mbps, 0, 1, 0))
-                           
+        cursor.execute('INSERT INTO results (timestamp, ping, download, upload, is_ok, is_full_test) VALUES (?, ?, ?, ?, ?, ?)',
+                       (timestamp, ping, download_mbps, upload_mbps, is_ok, 1))
         conn.commit()
         conn.close()
+        
     except Exception as e:
         print(f"Speedtest failed: {e}")
 
@@ -104,14 +134,14 @@ def schedule_jobs():
     scheduler.remove_all_jobs()
     
     interval = int(get_setting("interval_minutes"))
-    scheduler.add_job(run_speedtest, 'interval', minutes=interval, args=[False], id='standard_test')
+    scheduler.add_job(quick_check, 'interval', minutes=interval, id='standard_test')
     
     times = get_setting("full_test_times").split(',')
     for t in times:
         t = t.strip()
         if t:
             hour, minute = t.split(':')
-            scheduler.add_job(run_speedtest, 'cron', hour=int(hour), minute=int(minute), args=[True])
+            scheduler.add_job(run_full_speedtest, 'cron', hour=int(hour), minute=int(minute))
 
 @app.route('/')
 def index():
