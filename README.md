@@ -18,7 +18,7 @@ To accurately measure a 1Gbps connection, a speedtest must completely saturate y
 Clone the repository to your server (such as CasaOS or any Debian-based system) and run the install script:
 
 ```bash
-git clone [https://github.com/YOUR_USERNAME/speedtest-monitor.git](https://github.com/YOUR_USERNAME/speedtest-monitor.git)
+git clone https://github.com/Kanrog/speedtest-monitor.git
 cd speedtest-monitor
 bash install.sh
 ```
